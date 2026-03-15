@@ -29,7 +29,7 @@ class WeightedSeq2SeqTrainer(Seq2SeqTrainer):
         super().__init__(*args, **kwargs)
         self.use_weights = use_weights
 
-    def compute_loss(self, model, inputs, return_outputs=False):
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         """
         Compute weighted loss for balanced training.
 
@@ -37,6 +37,7 @@ class WeightedSeq2SeqTrainer(Seq2SeqTrainer):
             model: The model
             inputs: Input batch (may contain 'training_weight')
             return_outputs: Whether to return outputs
+            num_items_in_batch: Number of items in batch (for Transformers 4.46+)
 
         Returns:
             Weighted loss (and outputs if return_outputs=True)
