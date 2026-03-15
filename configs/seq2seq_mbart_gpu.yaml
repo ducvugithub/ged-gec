@@ -17,10 +17,10 @@ data:
   train_path: data/revita/splits/train_augmented_random_greedy_errdensity20_clean_seed42.jsonl
   val_path: data/revita/splits/val_augmented_random_greedy_errdensity20_clean_seed42.jsonl
   test_path: data/revita/splits/test_augmented_random_greedy_errdensity20_clean_seed42.jsonl
-  use_weights: true           # Use training_weight for balanced learning
+  use_weights: false           # Use training_weight for balanced learning
 
 training:
-  output_dir: experiments/mbart-large
+  output_dir: /scratch/project_2006601/GEC/experiments/mbart-large
   num_epochs: 3               # Fewer epochs for larger model
   batch_size: 4               # Larger model needs smaller batch
   eval_batch_size: 4
