@@ -1,0 +1,47 @@
+# mBART-large-50 configuration for Finnish GEC
+# Larger multilingual model - requires more GPU memory
+
+project_name: finnish-gec
+run_name: mbart-large-revita
+
+model:
+  type: mbart
+  pretrained_model: facebook/mbart-large-50
+  task_prefix: ""            # BART doesn't need prefix
+  max_source_length: 512
+  max_target_length: 512
+  src_lang: fi_FI           # Finnish source language code
+  tgt_lang: fi_FI           # Finnish target language code
+
+data:
+  train_path: data/revita/splits/train_augmented_random_greedy_errdensity20_clean_seed42.jsonl
+  val_path: data/revita/splits/val_augmented_random_greedy_errdensity20_clean_seed42.jsonl
+  test_path: data/revita/splits/test_augmented_random_greedy_errdensity20_clean_seed42.jsonl
+  use_weights: true           # Use training_weight for balanced learning
+
+training:
+  output_dir: experiments/mbart-large
+  num_epochs: 3               # Fewer epochs for larger model
+  batch_size: 4               # Larger model needs smaller batch
+  eval_batch_size: 4
+  gradient_accumulation_steps: 4  # Effective batch size = 16
+  learning_rate: 3e-5         # Lower LR for larger model
+  weight_decay: 0.01
+  warmup_steps: 500
+
+  # Evaluation
+  evaluation_strategy: steps
+  eval_steps: 500
+  save_steps: 500
+  save_total_limit: 2         # Save fewer checkpoints (large model)
+  load_best_model_at_end: true
+  metric_for_best_model: eval_loss
+
+  # Hardware
+  fp16: false  # Set to true only on CUDA GPUs
+  dataloader_num_workers: 4
+
+  # Logging
+  logging_steps: 100
+  use_wandb: false
+  report_to: none

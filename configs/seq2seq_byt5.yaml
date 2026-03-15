@@ -1,0 +1,45 @@
+# ByT5-small configuration for Finnish GEC
+# Best for morphologically rich languages like Finnish
+
+project_name: finnish-gec
+run_name: byt5-small-revita
+
+model:
+  type: byt5
+  pretrained_model: google/byt5-small
+  task_prefix: "grammar: "  # T5-style models need prefix
+  max_source_length: 512     # ByT5 uses bytes, needs much longer sequences than subword models
+  max_target_length: 512
+
+data:
+  train_path: data/revita/splits/train_augmented_random_greedy_errdensity20_clean_seed42.jsonl
+  val_path: data/revita/splits/val_augmented_random_greedy_errdensity20_clean_seed42.jsonl
+  test_path: data/revita/splits/test_augmented_random_greedy_errdensity20_clean_seed42.jsonl
+  use_weights: true           # Use training_weight for balanced learning
+
+training:
+  output_dir: experiments/byt5-small
+  num_epochs: 5
+  batch_size: 4               # ByT5 is memory-intensive
+  eval_batch_size: 4
+  gradient_accumulation_steps: 4  # Effective batch size = 16
+  learning_rate: 5e-5
+  weight_decay: 0.01
+  warmup_steps: 500
+
+  # Evaluation
+  evaluation_strategy: steps
+  eval_steps: 500
+  save_steps: 500
+  save_total_limit: 3
+  load_best_model_at_end: true
+  metric_for_best_model: eval_loss
+
+  # Hardware
+  fp16: false                 # Set to true only on CUDA GPUs
+  dataloader_num_workers: 4
+
+  # Logging
+  logging_steps: 100
+  use_wandb: false            # Set to true if you want wandb tracking
+  report_to: none

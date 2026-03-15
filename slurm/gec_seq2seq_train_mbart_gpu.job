@@ -1,0 +1,34 @@
+#!/bin/bash
+#SBATCH -A project_2006601
+#SBATCH --job-name=gec_mbart
+#SBATCH -o logs/train_mbart_%j.log
+#SBATCH -p gpusmall
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user=anh-duc.vu@helsinki.fi
+#SBATCH --nodes=1
+#SBATCH -c 10
+#SBATCH -t 24:00:00
+#SBATCH --mem=64G
+#SBATCH --gres=gpu:a100:1
+
+# Load modules
+module purge
+module load pytorch/2.5
+
+# Set up environment
+export TRANSFORMERS_CACHE=$HOME/.cache/huggingface
+export HF_HOME=$HOME/.cache/huggingface
+
+# Create log directory
+mkdir -p logs
+
+# Navigate to project directory
+cd $HOME/GEC
+
+# Install dependencies if not already installed
+pip install --user transformers datasets pyyaml --quiet
+
+# Run training
+echo "Starting mBART-large training at $(date)"
+srun python -m src.models.seq2seq.trainer configs/seq2seq_mbart_gpu.yaml
+echo "Training finished at $(date)"

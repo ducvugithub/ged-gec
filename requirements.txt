@@ -1,0 +1,45 @@
+# Core ML/NLP
+torch>=2.0.0
+transformers>=4.36.0
+datasets>=2.14.0
+evaluate>=0.4.0
+accelerate>=0.25.0
+sentencepiece>=0.1.99
+protobuf>=3.20.0
+
+# Model-specific
+peft>=0.7.0  # LoRA/QLoRA
+bitsandbytes>=0.41.0  # Quantization
+
+# Data processing
+pandas>=2.0.0
+numpy>=1.24.0
+tqdm>=4.65.0
+
+# Evaluation
+sacrebleu>=2.3.0
+nltk>=3.8.0
+
+# Experiment tracking
+wandb>=0.16.0
+tensorboard>=2.15.0
+
+# Configuration
+pyyaml>=6.0
+hydra-core>=1.3.0
+
+# Jupyter
+jupyter>=1.0.0
+ipywidgets>=8.0.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Finnish NLP (optional, for UD analyser integration)
+# stanza>=1.5.0
+# ufal.udpipe>=1.3.0
+
+# Development
+pytest>=7.4.0
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.5.0
