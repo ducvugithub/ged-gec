@@ -18,7 +18,7 @@ data:
   use_weights: true           # Use training_weight for balanced learning
 
 training:
-  output_dir: experiments/byt5-small
+  output_dir: /scratch/project_2006601/GEC/experiments/byt5-small
   num_epochs: 5
   batch_size: 4               # ByT5 is memory-intensive
   eval_batch_size: 4
@@ -36,7 +36,7 @@ training:
   metric_for_best_model: eval_loss
 
   # Hardware
-  fp16: true                 # Set to true only on CUDA GPUs
+  fp16: false                # Disabled due to NaN loss issues with fp16
   dataloader_num_workers: 4
 
   # Logging
