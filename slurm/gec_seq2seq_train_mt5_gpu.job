@@ -23,7 +23,7 @@ export HF_HOME=$HOME/.cache/huggingface
 mkdir -p logs
 
 # Navigate to project directory
-cd $HOME/GEC
+cd /scratch/project_2006601/GEC
 
 # Install dependencies if not already installed
 pip install --user transformers datasets pyyaml --quiet
