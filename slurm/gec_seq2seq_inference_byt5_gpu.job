@@ -31,7 +31,7 @@ pip install --user transformers datasets pyyaml tqdm --quiet
 # Run inference
 echo "Starting ByT5-small inference at $(date)"
 srun python -m src.models.seq2seq.inference \
-    --model /scratch/project_2006601/GEC/experiments/byt5-small \
+    --model /scratch/project_2006601/GEC/experiments/byt5-small/final \
     --test data/revita/splits/test_augmented_random_greedy_errdensity20_clean_seed42.jsonl \
     --output predictions/byt5-small.jsonl \
     --batch-size 16
