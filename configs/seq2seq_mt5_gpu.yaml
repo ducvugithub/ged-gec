@@ -20,9 +20,9 @@ data:
 training:
   output_dir: /scratch/project_2006601/GEC/experiments/mt5-base
   num_epochs: 5
-  batch_size: 8
+  batch_size: 4
   eval_batch_size: 8
-  gradient_accumulation_steps: 2  # Effective batch size = 16
+  gradient_accumulation_steps: 4  # Effective batch size = 16 (same as ByT5)
   learning_rate: 5e-5
   weight_decay: 0.01
   warmup_steps: 500
