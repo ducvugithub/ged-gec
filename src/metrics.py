@@ -112,6 +112,12 @@ def compute_f05_simple(predictions: List[str],
     """
     Compute simple F0.5 score based on token-level edits.
 
+    WHY F0.5 INSTEAD OF F1?
+    - F0.5 weights precision 2.5x more than recall
+    - In GEC, false positives (wrong corrections) are worse than false negatives (missed errors)
+    - Better to leave text unchanged than introduce new errors
+    - Standard metric for GEC evaluation (used in CoNLL, BEA shared tasks)
+
     This is a simplified version that computes F0.5 based on:
     - TP: Tokens that were correctly changed from source to match reference
     - FP: Tokens that were changed but don't match reference
@@ -182,38 +188,104 @@ def compute_f05_simple(predictions: List[str],
 def compute_edit_distance_metrics(predictions: List[str],
                                    references: List[str]) -> Dict[str, float]:
     """
-    Compute edit distance based metrics.
+    Compute character-level edit distance metrics.
+
+    For Finnish GEC, character-level is more appropriate than word-level
+    due to rich morphology (case, number, person inflections).
 
     Args:
         predictions: Model predictions
         references: Gold corrections
 
     Returns:
-        Dict with various edit distance metrics
+        Dict with character edit distance metrics
     """
     if len(predictions) != len(references):
         raise ValueError("predictions and references must have same length")
 
     char_distances = []
-    word_distances = []
+    normalized_distances = []
 
     for pred, ref in zip(predictions, references):
         # Character-level Levenshtein distance
         char_dist = Levenshtein.distance(pred, ref)
         char_distances.append(char_dist)
 
-        # Word-level edit distance
-        pred_words = pred.split()
-        ref_words = ref.split()
-        word_dist = Levenshtein.distance(' '.join(pred_words), ' '.join(ref_words))
-        word_distances.append(word_dist)
+        # Normalized by reference length (percentage of characters that differ)
+        normalized_dist = (char_dist / len(ref) * 100) if len(ref) > 0 else 0
+        normalized_distances.append(normalized_dist)
 
     return {
         'avg_char_edit_distance': np.mean(char_distances),
-        'avg_word_edit_distance': np.mean(word_distances),
         'median_char_edit_distance': np.median(char_distances),
-        'median_word_edit_distance': np.median(word_distances)
+        'avg_normalized_edit_distance': np.mean(normalized_distances)  # As percentage
     }
+
+
+def compute_bleu(predictions: List[str],
+                 references: List[str],
+                 max_n: int = 4) -> float:
+    """
+    Compute corpus-level BLEU score.
+
+    BLEU vs GLEU:
+    - BLEU: Corpus-level metric (traditional MT evaluation)
+    - GLEU: Sentence-level metric with source penalty (designed for GEC)
+
+    Args:
+        predictions: Model predictions
+        references: Gold corrections
+        max_n: Maximum n-gram order (default: 4)
+
+    Returns:
+        BLEU score (0-100)
+    """
+    if len(predictions) != len(references):
+        raise ValueError("predictions and references must have same length")
+
+    # Collect all n-gram counts across corpus
+    total_matches = {n: 0 for n in range(1, max_n + 1)}
+    total_possible = {n: 0 for n in range(1, max_n + 1)}
+    total_pred_len = 0
+    total_ref_len = 0
+
+    for pred, ref in zip(predictions, references):
+        pred_tokens = pred.split()
+        ref_tokens = ref.split()
+
+        total_pred_len += len(pred_tokens)
+        total_ref_len += len(ref_tokens)
+
+        for n in range(1, max_n + 1):
+            pred_ngrams = Counter(_get_ngrams(pred_tokens, n))
+            ref_ngrams = Counter(_get_ngrams(ref_tokens, n))
+
+            # Count matches (clipped by reference counts)
+            for ngram, count in pred_ngrams.items():
+                total_matches[n] += min(count, ref_ngrams.get(ngram, 0))
+            total_possible[n] += len(_get_ngrams(pred_tokens, n))
+
+    # Compute precisions for each n-gram order
+    precisions = []
+    for n in range(1, max_n + 1):
+        if total_possible[n] > 0:
+            precisions.append(total_matches[n] / total_possible[n])
+        else:
+            precisions.append(0.0)
+
+    # Brevity penalty
+    if total_pred_len >= total_ref_len:
+        bp = 1.0
+    else:
+        bp = np.exp(1 - total_ref_len / total_pred_len) if total_pred_len > 0 else 0.0
+
+    # Geometric mean of precisions
+    if all(p > 0 for p in precisions):
+        geo_mean = np.exp(np.mean([np.log(p) for p in precisions]))
+    else:
+        geo_mean = 0.0
+
+    return bp * geo_mean * 100
 
 
 def compute_all_metrics(predictions: List[str],
@@ -221,6 +293,17 @@ def compute_all_metrics(predictions: List[str],
                        sources: List[str]) -> Dict[str, float]:
     """
     Compute all available metrics.
+
+    Metrics computed:
+    - exact_match: Percentage of perfect predictions (0-100)
+    - gleu: Sentence-level BLEU with source penalty (0-100)
+    - bleu: Corpus-level BLEU score (0-100)
+    - precision: Percentage of correct corrections (0-100)
+    - recall: Percentage of errors fixed (0-100)
+    - f05: Precision-weighted F-score (0-100)
+    - avg_char_edit_distance: Average character-level Levenshtein distance
+    - median_char_edit_distance: Median character-level distance
+    - avg_normalized_edit_distance: Edit distance as % of reference length
 
     Args:
         predictions: Model predictions
@@ -235,8 +318,9 @@ def compute_all_metrics(predictions: List[str],
     # Exact match
     metrics['exact_match'] = exact_match_accuracy(predictions, references) * 100
 
-    # GLEU
+    # N-gram overlap metrics
     metrics['gleu'] = compute_gleu(predictions, references, sources)
+    metrics['bleu'] = compute_bleu(predictions, references)
 
     # F0.5 (simple version)
     f05_metrics = compute_f05_simple(predictions, references, sources)

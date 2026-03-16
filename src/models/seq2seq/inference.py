@@ -88,6 +88,8 @@ class Seq2SeqInferencer:
         """
         Generate predictions for entire test file.
 
+        Preserves all metadata from test data (num_errors, etc.) in output.
+
         Args:
             test_file: Input JSONL file with test data
             output_file: Output JSONL file for predictions
@@ -100,9 +102,8 @@ class Seq2SeqInferencer:
 
         print(f"Loaded {len(test_data):,} test examples")
 
-        # Extract corrupted texts and references
+        # Extract corrupted texts for prediction
         corrupted_texts = [example['corrupted'] for example in test_data]
-        references = [example['correct'] for example in test_data]
 
         # Generate predictions in batches
         print(f"\nGenerating predictions (batch_size={self.batch_size})...")
@@ -113,17 +114,23 @@ class Seq2SeqInferencer:
             batch_predictions = self.predict_batch(batch_corrupted, max_length)
             all_predictions.extend(batch_predictions)
 
-        # Create output records
+        # Create output records (preserve all metadata from test data)
         print(f"\nSaving predictions to {output_file}")
         output_file.parent.mkdir(parents=True, exist_ok=True)
 
         with open(output_file, 'w', encoding='utf-8') as f:
-            for corrupted, reference, prediction in zip(corrupted_texts, references, all_predictions):
-                record = {
-                    'corrupted': corrupted,
-                    'reference': reference,
-                    'prediction': prediction
-                }
+            for example, prediction in zip(test_data, all_predictions):
+                # Start with original example to preserve all metadata
+                record = example.copy()
+
+                # Add prediction and standardize field names
+                record['prediction'] = prediction
+                record['reference'] = example.get('correct', example.get('reference', ''))
+
+                # Remove 'correct' if it exists (keep 'reference' for consistency)
+                if 'correct' in record:
+                    del record['correct']
+
                 f.write(json.dumps(record, ensure_ascii=False) + '\n')
 
         print(f"✓ Saved {len(all_predictions):,} predictions")
@@ -134,8 +141,10 @@ class Seq2SeqInferencer:
         for i in range(min(3, len(all_predictions))):
             print(f"\nExample {i+1}:")
             print(f"  Corrupted:  {corrupted_texts[i]}")
-            print(f"  Reference:  {references[i]}")
+            print(f"  Reference:  {test_data[i].get('correct', test_data[i].get('reference', ''))}")
             print(f"  Predicted:  {all_predictions[i]}")
+            if 'num_errors' in test_data[i]:
+                print(f"  Num Errors: {test_data[i]['num_errors']}")
         print("-" * 80)
 
 

@@ -11,7 +11,7 @@ from collections import defaultdict
 import sys
 
 # Import metrics from metrics module
-from metrics import (
+from src.metrics import (
     compute_all_metrics,
     compute_f05_simple,
     compute_gleu,
