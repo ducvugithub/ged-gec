@@ -30,8 +30,15 @@ help:
 	@echo "  make train-mt5      Train mT5-base"
 	@echo "  make train-mbart    Train mBART-large"
 	@echo ""
+	@echo "Inference (Generate Predictions):"
+	@echo "  make infer-byt5     Generate predictions with ByT5-small"
+	@echo "  make infer-mt5      Generate predictions with mT5-base"
+	@echo "  make infer-mbart    Generate predictions with mBART-large"
+	@echo ""
 	@echo "Evaluation:"
-	@echo "  make eval           Evaluate model on test set"
+	@echo "  make eval-byt5      Evaluate ByT5-small predictions"
+	@echo "  make eval-mt5       Evaluate mT5-base predictions"
+	@echo "  make eval-mbart     Evaluate mBART-large predictions"
 	@echo "  make error-analysis Run error distribution analysis"
 
 install:
@@ -98,9 +105,52 @@ train-mt5:
 train-mbart:
 	python -m src.models.seq2seq.trainer configs/seq2seq_mbart.yaml
 
-# Evaluation
-eval:
-	python -m src.evaluate --config configs/seq2seq_mt5.yaml --split revita_test
+# =============================================================================
+# INFERENCE (Generate Predictions)
+# =============================================================================
+
+infer-byt5:
+	python -m src.models.seq2seq.inference \
+		--model experiments/byt5-small \
+		--test data/revita/splits/test_augmented_random_greedy_errdensity20_clean_seed42.jsonl \
+		--output predictions/byt5-small.jsonl \
+		--batch-size 16
+
+infer-mt5:
+	python -m src.models.seq2seq.inference \
+		--model experiments/mt5-base \
+		--test data/revita/splits/test_augmented_random_greedy_errdensity20_clean_seed42.jsonl \
+		--output predictions/mt5-base.jsonl \
+		--batch-size 16
+
+infer-mbart:
+	python -m src.models.seq2seq.inference \
+		--model experiments/mbart-large \
+		--test data/revita/splits/test_augmented_random_greedy_errdensity20_clean_seed42.jsonl \
+		--output predictions/mbart-large.jsonl \
+		--batch-size 8
+
+# =============================================================================
+# EVALUATION
+# =============================================================================
+
+eval-byt5:
+	python -m src.evaluate \
+		--predictions predictions/byt5-small.jsonl \
+		--test data/revita/splits/test_augmented_random_greedy_errdensity20_clean_seed42.jsonl \
+		--output results/byt5-small.json
+
+eval-mt5:
+	python -m src.evaluate \
+		--predictions predictions/mt5-base.jsonl \
+		--test data/revita/splits/test_augmented_random_greedy_errdensity20_clean_seed42.jsonl \
+		--output results/mt5-base.json
+
+eval-mbart:
+	python -m src.evaluate \
+		--predictions predictions/mbart-large.jsonl \
+		--test data/revita/splits/test_augmented_random_greedy_errdensity20_clean_seed42.jsonl \
+		--output results/mbart-large.json
 
 error-analysis:
 	python -m src.error_analysis --all
