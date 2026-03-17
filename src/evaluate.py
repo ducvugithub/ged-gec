@@ -70,11 +70,13 @@ class GECEvaluator:
 
         # Stratified metrics
         print("Computing stratified metrics...")
-        stratified = self._stratify_by_error_count(pred_data, predictions, references, sources)
+        stratified_count = self._stratify_by_error_count(pred_data, predictions, references, sources)
+        stratified_density = self._stratify_by_error_density(pred_data, predictions, references, sources)
 
         return {
             'aggregate': metrics,
-            'by_error_count': stratified,
+            'by_error_count': stratified_count,
+            'by_error_density': stratified_density,
             'num_examples': len(predictions)
         }
 
@@ -129,6 +131,60 @@ class GECEvaluator:
 
         return results
 
+    def _stratify_by_error_density(self,
+                                     examples: List[Dict],
+                                     predictions: List[str],
+                                     references: List[str],
+                                     sources: List[str]) -> Dict[str, Dict]:
+        """
+        Compute metrics stratified by error density (error rate).
+
+        Args:
+            examples: List of examples with metadata
+            predictions: Model predictions
+            references: Gold corrections
+            sources: Original corrupted sentences
+
+        Returns:
+            Dictionary mapping error density ranges to metric dicts
+        """
+        density_groups = defaultdict(lambda: {'predictions': [], 'references': [], 'sources': []})
+
+        for example, pred, ref, src in zip(examples, predictions, references, sources):
+            error_rate = example.get('error_rate', 0.0)
+            error_rate_pct = error_rate * 100
+
+            # Group by error density ranges (matching train/val/test stats)
+            if error_rate_pct < 0.001:
+                key = '0%'
+            elif error_rate_pct < 5:
+                key = '0-5%'
+            elif error_rate_pct < 10:
+                key = '5-10%'
+            elif error_rate_pct < 15:
+                key = '10-15%'
+            elif error_rate_pct < 20:
+                key = '15-20%'
+            else:
+                key = '20%+'
+
+            density_groups[key]['predictions'].append(pred)
+            density_groups[key]['references'].append(ref)
+            density_groups[key]['sources'].append(src)
+
+        results = {}
+        for key, group in density_groups.items():
+            preds = group['predictions']
+            refs = group['references']
+            srcs = group['sources']
+
+            if len(preds) > 0:
+                group_metrics = compute_all_metrics(preds, refs, srcs)
+                group_metrics['count'] = len(preds)
+                results[key] = group_metrics
+
+        return results
+
 
 def print_results(results: Dict):
     """Pretty print evaluation results."""
@@ -143,17 +199,25 @@ def print_results(results: Dict):
     agg = results['aggregate']
     print(f"Total examples: {results['num_examples']:,}")
     print(f"\nPrimary Metrics:")
-    print(f"  F0.5 (precision-weighted): {agg.get('f05', 0):.2f}%")
-    print(f"  GLEU (GEC-specific):       {agg.get('gleu', 0):.2f}")
-    print(f"  Exact Match:               {agg.get('exact_match', 0):.2f}%")
+    print(f"  Correction F0.5:           {agg.get('correction_f05', 0):.2f}%")
+    print(f"  Correction GLEU:           {agg.get('correction_gleu', 0):.2f}")
+    print(f"  Correction Exact Match:    {agg.get('correction_exact_match', 0):.2f}%")
 
-    print(f"\nDetailed F0.5 Breakdown:")
-    print(f"  Precision: {agg.get('precision', 0):.2f}%")
-    print(f"  Recall:    {agg.get('recall', 0):.2f}%")
+    print(f"\nDetailed Correction Metrics:")
+    print(f"  Precision: {agg.get('correction_precision', 0):.2f}%")
+    print(f"  Recall:    {agg.get('correction_recall', 0):.2f}%")
 
-    print(f"\nEdit Distance:")
-    print(f"  Avg Character Edit Distance: {agg.get('avg_char_edit_distance', 0):.2f}")
-    print(f"  Avg Word Edit Distance:      {agg.get('avg_word_edit_distance', 0):.2f}")
+    print(f"\n🔍 GED (Error Detection) Metrics:")
+    print(f"  Token-level Detection F0.5: {agg.get('detection_token_f05', 0):.2f}%")
+    print(f"    Precision: {agg.get('detection_token_precision', 0):.2f}%")
+    print(f"    Recall:    {agg.get('detection_token_recall', 0):.2f}%")
+    print(f"  Sentence-level Detection F0.5: {agg.get('detection_sent_f05', 0):.2f}%")
+    print(f"    Accuracy:  {agg.get('detection_sent_accuracy', 0):.2f}%")
+
+    print(f"\nCorrection Edit Distance:")
+    print(f"  Avg Character Edit Distance: {agg.get('correction_avg_char_edit_distance', 0):.2f}")
+    print(f"  Median Character Edit Distance: {agg.get('correction_median_char_edit_distance', 0):.2f}")
+    print(f"  Avg Normalized Edit Distance: {agg.get('correction_avg_normalized_edit_distance', 0):.2f}%")
 
     # Stratified metrics
     if 'by_error_count' in results and results['by_error_count']:
@@ -168,9 +232,26 @@ def print_results(results: Dict):
             if key in results['by_error_count']:
                 metrics = results['by_error_count'][key]
                 print(f"{key:<15} {metrics['count']:<10,} "
-                      f"{metrics.get('f05', 0):<10.2f} "
-                      f"{metrics.get('gleu', 0):<10.2f} "
-                      f"{metrics.get('exact_match', 0):<12.2f}")
+                      f"{metrics.get('correction_f05', 0):<10.2f} "
+                      f"{metrics.get('correction_gleu', 0):<10.2f} "
+                      f"{metrics.get('correction_exact_match', 0):<12.2f}")
+
+    # Stratified by error density
+    if 'by_error_density' in results and results['by_error_density']:
+        print("\n📊 Stratified by Error Density")
+        print("-" * 70)
+        print(f"{'Density Range':<15} {'Count':<10} {'F0.5':<10} {'GLEU':<10} {'Exact Match':<12}")
+        print("-" * 70)
+
+        # Sort by density
+        density_order = ['0%', '0-5%', '5-10%', '10-15%', '15-20%', '20%+']
+        for key in density_order:
+            if key in results['by_error_density']:
+                metrics = results['by_error_density'][key]
+                print(f"{key:<15} {metrics['count']:<10,} "
+                      f"{metrics.get('correction_f05', 0):<10.2f} "
+                      f"{metrics.get('correction_gleu', 0):<10.2f} "
+                      f"{metrics.get('correction_exact_match', 0):<12.2f}")
 
     print("="*70 + "\n")
 

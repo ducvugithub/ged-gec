@@ -1,0 +1,38 @@
+#!/bin/bash
+#SBATCH -A project_2006601
+#SBATCH --job-name=gec_mt5_infer
+#SBATCH -o logs/infer_mt5_%j.log
+#SBATCH -p gpusmall
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user=anh-duc.vu@helsinki.fi
+#SBATCH --nodes=1
+#SBATCH -c 10
+#SBATCH -t 04:00:00
+#SBATCH --mem=64G
+#SBATCH --gres=gpu:a100:1
+
+# Load modules
+module purge
+module load pytorch/2.5
+
+# Set up environment
+export TRANSFORMERS_CACHE=$HOME/.cache/huggingface
+export HF_HOME=$HOME/.cache/huggingface
+
+# Create directories
+mkdir -p logs predictions
+
+# Navigate to project directory
+cd /scratch/project_2006601/GEC
+
+# Install dependencies if not already installed
+pip install --user transformers datasets pyyaml tqdm --quiet
+
+# Run inference
+echo "Starting mT5-base inference at $(date)"
+srun python -m src.models.seq2seq.inference \
+    --model /scratch/project_2006601/GEC/experiments/mt5-base/final \
+    --test data/revita/splits/test_augmented_random_greedy_errdensity20_clean_seed42.jsonl \
+    --output predictions/mt5-base.jsonl \
+    --batch-size 16
+echo "Inference finished at $(date)"

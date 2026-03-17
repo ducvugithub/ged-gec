@@ -179,9 +179,9 @@ def compute_f05_simple(predictions: List[str],
     f05 = (1 + beta**2) * (precision * recall) / (beta**2 * precision + recall) if (precision + recall) > 0 else 0
 
     return {
-        'precision': precision * 100,
-        'recall': recall * 100,
-        'f05': f05 * 100
+        'correction_precision': precision * 100,
+        'correction_recall': recall * 100,
+        'correction_f05': f05 * 100
     }
 
 
@@ -216,9 +216,9 @@ def compute_edit_distance_metrics(predictions: List[str],
         normalized_distances.append(normalized_dist)
 
     return {
-        'avg_char_edit_distance': np.mean(char_distances),
-        'median_char_edit_distance': np.median(char_distances),
-        'avg_normalized_edit_distance': np.mean(normalized_distances)  # As percentage
+        'correction_avg_char_edit_distance': np.mean(char_distances),
+        'correction_median_char_edit_distance': np.median(char_distances),
+        'correction_avg_normalized_edit_distance': np.mean(normalized_distances)  # As percentage
     }
 
 
@@ -288,6 +288,101 @@ def compute_bleu(predictions: List[str],
     return bp * geo_mean * 100
 
 
+def compute_ged_metrics(predictions: List[str],
+                        references: List[str],
+                        sources: List[str]) -> Dict[str, float]:
+    """
+    Compute Grammatical Error Detection (GED) metrics.
+
+    Measures whether the model can DETECT errors (regardless of correction quality).
+    Not penalized by single-reference problems - only checks if errors were spotted.
+
+    Token-level: Did model change tokens that actually had errors?
+    Sentence-level: Did model correctly classify sentence as needing corrections?
+
+    Args:
+        predictions: Model predictions
+        references: Gold corrections
+        sources: Original corrupted sentences
+
+    Returns:
+        Dict with GED metrics
+    """
+    # Token-level detection
+    total_det_tp = 0  # Detected a real error position
+    total_det_fp = 0  # Changed a correct position
+    total_det_fn = 0  # Missed an error position
+
+    # Sentence-level detection
+    sent_det_tp = 0   # Correctly detected error sentence
+    sent_det_fp = 0   # Wrongly flagged clean sentence
+    sent_det_fn = 0   # Missed error sentence
+    sent_tn = 0       # Correctly left clean sentence unchanged
+
+    for pred, ref, src in zip(predictions, references, sources):
+        pred_tokens = pred.split()
+        ref_tokens = ref.split()
+        src_tokens = src.split()
+
+        # Pad to same length
+        max_len = max(len(pred_tokens), len(ref_tokens), len(src_tokens))
+        pred_tokens += [''] * (max_len - len(pred_tokens))
+        ref_tokens += [''] * (max_len - len(ref_tokens))
+        src_tokens += [''] * (max_len - len(src_tokens))
+
+        # Token-level detection
+        has_error = (src != ref)  # Does sentence have errors?
+        made_change = (src != pred)  # Did model make changes?
+
+        for p, r, s in zip(pred_tokens, ref_tokens, src_tokens):
+            error_here = (s != r)  # Error at this position?
+            detected_here = (s != p)  # Model changed this position?
+
+            if detected_here and error_here:
+                total_det_tp += 1
+            elif detected_here and not error_here:
+                total_det_fp += 1
+            elif not detected_here and error_here:
+                total_det_fn += 1
+
+        # Sentence-level detection
+        if has_error and made_change:
+            sent_det_tp += 1
+        elif not has_error and made_change:
+            sent_det_fp += 1
+        elif has_error and not made_change:
+            sent_det_fn += 1
+        elif not has_error and not made_change:
+            sent_tn += 1
+
+    # Token-level metrics
+    det_precision = total_det_tp / (total_det_tp + total_det_fp) if (total_det_tp + total_det_fp) > 0 else 0
+    det_recall = total_det_tp / (total_det_tp + total_det_fn) if (total_det_tp + total_det_fn) > 0 else 0
+    beta = 0.5
+    det_f05 = (1 + beta**2) * (det_precision * det_recall) / (beta**2 * det_precision + det_recall) if (det_precision + det_recall) > 0 else 0
+
+    # Sentence-level metrics
+    sent_precision = sent_det_tp / (sent_det_tp + sent_det_fp) if (sent_det_tp + sent_det_fp) > 0 else 0
+    sent_recall = sent_det_tp / (sent_det_tp + sent_det_fn) if (sent_det_tp + sent_det_fn) > 0 else 0
+    sent_f05 = (1 + beta**2) * (sent_precision * sent_recall) / (beta**2 * sent_precision + sent_recall) if (sent_precision + sent_recall) > 0 else 0
+
+    total_sents = len(predictions)
+    sent_accuracy = (sent_tn + sent_det_tp) / total_sents if total_sents > 0 else 0
+
+    return {
+        # Token-level detection (position-based)
+        'detection_token_precision': det_precision * 100,
+        'detection_token_recall': det_recall * 100,
+        'detection_token_f05': det_f05 * 100,
+
+        # Sentence-level detection (binary classification)
+        'detection_sent_precision': sent_precision * 100,
+        'detection_sent_recall': sent_recall * 100,
+        'detection_sent_f05': sent_f05 * 100,
+        'detection_sent_accuracy': sent_accuracy * 100,
+    }
+
+
 def compute_all_metrics(predictions: List[str],
                        references: List[str],
                        sources: List[str]) -> Dict[str, float]:
@@ -295,15 +390,20 @@ def compute_all_metrics(predictions: List[str],
     Compute all available metrics.
 
     Metrics computed:
-    - exact_match: Percentage of perfect predictions (0-100)
-    - gleu: Sentence-level BLEU with source penalty (0-100)
-    - bleu: Corpus-level BLEU score (0-100)
-    - precision: Percentage of correct corrections (0-100)
-    - recall: Percentage of errors fixed (0-100)
-    - f05: Precision-weighted F-score (0-100)
-    - avg_char_edit_distance: Average character-level Levenshtein distance
-    - median_char_edit_distance: Median character-level distance
-    - avg_normalized_edit_distance: Edit distance as % of reference length
+    GEC (Correction) Metrics:
+    - correction_exact_match: Percentage of perfect predictions (0-100)
+    - correction_gleu: Sentence-level BLEU with source penalty (0-100)
+    - correction_bleu: Corpus-level BLEU score (0-100)
+    - correction_precision: Percentage of correct corrections (0-100)
+    - correction_recall: Percentage of errors fixed (0-100)
+    - correction_f05: Precision-weighted F-score (0-100)
+    - correction_avg_char_edit_distance: Average character-level Levenshtein distance
+    - correction_median_char_edit_distance: Median character-level distance
+    - correction_avg_normalized_edit_distance: Edit distance as % of reference length
+
+    GED (Detection) Metrics:
+    - detection_token_precision/recall/f05: Token-level error detection
+    - detection_sent_precision/recall/f05/accuracy: Sentence-level detection
 
     Args:
         predictions: Model predictions
@@ -316,19 +416,23 @@ def compute_all_metrics(predictions: List[str],
     metrics = {}
 
     # Exact match
-    metrics['exact_match'] = exact_match_accuracy(predictions, references) * 100
+    metrics['correction_exact_match'] = exact_match_accuracy(predictions, references) * 100
 
     # N-gram overlap metrics
-    metrics['gleu'] = compute_gleu(predictions, references, sources)
-    metrics['bleu'] = compute_bleu(predictions, references)
+    metrics['correction_gleu'] = compute_gleu(predictions, references, sources)
+    metrics['correction_bleu'] = compute_bleu(predictions, references)
 
-    # F0.5 (simple version)
+    # GEC: F0.5 (correction metrics)
     f05_metrics = compute_f05_simple(predictions, references, sources)
     metrics.update(f05_metrics)
 
     # Edit distance
     edit_metrics = compute_edit_distance_metrics(predictions, references)
     metrics.update(edit_metrics)
+
+    # GED: Error detection metrics
+    ged_metrics = compute_ged_metrics(predictions, references, sources)
+    metrics.update(ged_metrics)
 
     return metrics
 
