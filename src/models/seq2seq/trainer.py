@@ -88,8 +88,17 @@ def train(config: Dict[str, Any]):
 
     # Load model and tokenizer
     model_name = model_config['pretrained_model']
+    model_type = model_config.get('type', '').lower()
+
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+
+    # mBART requires src_lang set on the tokenizer and forced_bos_token_id on the model
+    if model_type == 'mbart':
+        src_lang = model_config.get('src_lang', 'fi_FI')
+        tokenizer.src_lang = src_lang
+        model.config.forced_bos_token_id = tokenizer.lang_code_to_id[src_lang]
+        print(f"ℹ️  mBART: src_lang={src_lang}, forced_bos_token_id={model.config.forced_bos_token_id}")
 
     # Load and preprocess data
     dataset = load_data(config)

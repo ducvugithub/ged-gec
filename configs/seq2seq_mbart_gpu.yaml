@@ -38,7 +38,7 @@ training:
   metric_for_best_model: eval_loss
 
   # Hardware
-  fp16: true  # Set to true only on CUDA GPUs
+  fp16: false  # Disabled due to NaN loss issues with fp16
   dataloader_num_workers: 4
 
   # Logging
